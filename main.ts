@@ -1,17 +1,37 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { Editor, MarkdownView, Notice, Plugin, TFile, App, PluginSettingTab, Setting} from 'obsidian';
+import { ImportModal } from 'modal';
+import { ParserResult } from 'parser';
 
 // Remember to rename these classes and interfaces!
 
-interface MyPluginSettings {
-	mySetting: string;
+interface PaperImportSettings {
+	template: string;
+	defaultPaperFolder: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: PaperImportSettings = {
+	template: 'Title: {{TITLE}}\nAuthors: {{AUTHORS}}\nAbstract: {{ABSTRACT}}',
+	defaultPaperFolder: ""
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+function formatDate(date: Date) : string {
+	return "{0}-{1}-{2}".format(date.getFullYear().toString(), date.getMonth().toString(), date.getDate().toString());
+}
+
+export default class PaperImport extends Plugin {
+	settings: PaperImportSettings;
+
+	filloutTemplate(result: ParserResult) : string {
+		const dateNow = new Date(Date.now());
+		let content = this.settings.template;
+		content = content.replace("{{TITLE}}", result.title);
+		content = content.replace("{{AUTHOR}}", result.author);
+		content = content.replace("{{ABSTRACT}}", result.abstract);
+		content = content.replace("{{DATEPUBLISHED}}", formatDate(result.datePublished));
+		content = content.replace("{{DATEREAD}}", formatDate(dateNow));
+		content = content.replace("{{URL}}", result.url);
+		return content
+	}
 
 	async onload() {
 		await this.loadSettings();
@@ -28,40 +48,55 @@ export default class MyPlugin extends Plugin {
 		const statusBarItemEl = this.addStatusBarItem();
 		statusBarItemEl.setText('Status Bar Text');
 
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
+			id: 'import-paper',
+			name: 'Import Paper',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
+				new ImportModal(this.app, (result) => {
+					if (result != null) {
+						editor.setValue(this.filloutTemplate(result));
+					}
+				}).open();
 			}
 		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+		this.addCommand({
+			id: 'import-paper-new-file',
+			name: 'Import Paper (Create File)',
+			callback : () => {
+				if (this.settings.defaultPaperFolder.length == 0) {
+					new Notice('Paper notes folder not declared in settings.')
+					return;
 				}
+				new ImportModal(this.app, async (result) => {
+					if (result != null) {
+						const content = this.filloutTemplate(result)
+						
+						try {
+							await app.vault.createFolder(this.settings.defaultPaperFolder);
+						} catch {
+							console.log("Folder already exists.")
+						}
+
+						let fileName = result.title + ".md";
+						fileName = fileName.replace(/:/g, "-");
+						fileName = fileName.replace(/\?\/\\\}\{\[\]/g, "");
+						const filePath = this.settings.defaultPaperFolder + "/" + fileName;
+						
+						if (app.vault.getAbstractFileByPath(filePath) instanceof TFile) {
+							new Notice(`File for paper ('${result.title}') already exists.`);
+							return;
+						}
+
+						const file = await app.vault.create(filePath, content);
+						if (file instanceof TFile) {
+							if (app.workspace.getMostRecentLeaf() == null) {
+								return;
+							}
+							app.workspace.getMostRecentLeaf()?.openFile(file);
+						}
+					}
+				}).open();
 			}
 		});
 
@@ -91,26 +126,10 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
 class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+	plugin: PaperImport;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: PaperImport) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -120,18 +139,32 @@ class SampleSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: 'Settings for my awesome plugin.'});
+		containerEl.createEl('h2', {text: 'Settings for Paper Import plugin.'});
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+			.setName('Template to populate paper notes')
+			.setDesc('Placeholders to use are:\n{{TITLE}}, {{AUTHOR}}, {{ABSTRACT}}, {{DATEPUBLISHED}}, {{DATEREAD}}, {{URL}}.')
+			.addTextArea(text => {
+				text
+				.setValue(this.plugin.settings.template)
 				.onChange(async (value) => {
-					console.log('Secret: ' + value);
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.template = value;
 					await this.plugin.saveSettings();
-				}));
+				});
+				text.inputEl.rows = 15;
+				text.inputEl.cols = 50;
+			});
+
+        new Setting(containerEl)
+			.setName('Paper notes folder')
+			.setDesc('Path to folder to place new notes in')
+			.addText(text => {
+				text
+				.setValue(this.plugin.settings.defaultPaperFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.defaultPaperFolder = value;
+					await this.plugin.saveSettings();
+				});
+			});
 	}
 }

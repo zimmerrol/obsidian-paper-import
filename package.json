@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-paper-import",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "This plugin simplifies creating paper notes in obsidian by allowing automatic import from arXiv and Openreview..",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
