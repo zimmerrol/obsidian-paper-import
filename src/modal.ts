@@ -12,10 +12,10 @@ export class ImportModal extends Modal {
 		this.onSubmit = onSubmit;
 	}
 
-    async trySubmittingResult() {
-        if (this.selectedParser) {
-            this.close();
-            this.result = await this.selectedParser?.parse(this.url);
+    async trySubmittingResult(modal: ImportModal) {
+        if (modal.selectedParser) {
+            modal.close();
+            modal.result = await modal.selectedParser?.parse(modal.url);
             this.onSubmit(this.result);
         }
     }
@@ -42,7 +42,7 @@ export class ImportModal extends Modal {
 			});
             text.inputEl.addEventListener("keyup", ({key}) => {
                 if (key == "Enter") {
-                    this.trySubmittingResult();
+                    this.trySubmittingResult(this);
                 }
             })
         });
@@ -52,7 +52,7 @@ export class ImportModal extends Modal {
 			btn
 			.setButtonText("Import")
 			.setCta()
-			.onClick(this.trySubmittingResult));
+			.onClick(() => this.trySubmittingResult(this)));
 	}
 
 	onClose() {
