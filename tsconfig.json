@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
+    "baseUrl": "src",
+    "outDir": "dist",
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
@@ -20,6 +21,7 @@
     ]
   },
   "include": [
-    "**/*.ts"
-  ]
+    "src/**/*.ts"
+  ],
+  "exclude": ["dist"],
 }

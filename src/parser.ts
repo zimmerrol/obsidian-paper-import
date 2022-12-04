@@ -107,8 +107,6 @@ registerParser(new Parser(
     }
 ));
 
-
-
 async function getSourceAsDOM(url: string)
 {
     const html = await requestUrl(url).text;
